@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    DWX_ZeroMQ_Connector_v2_0_1_RC8.py
+    ZeroMQ Python Connector.py
     --
     @author: Darwinex Labs (www.darwinex.com)
     
@@ -19,7 +19,7 @@
 # import zmq, time
 import zmq
 from time import sleep
-from pandas import DataFrame, Timestamp
+from pandas import DataFrame, Timestamp, Timedelta, Series
 from threading import Thread
 
 class DWX_ZeroMQ_Connector():
@@ -27,6 +27,7 @@ class DWX_ZeroMQ_Connector():
     """
     Setup ZeroMQ -> MetaTrader Connector
     """
+
     def __init__(self, 
                  _ClientID='DLabs_Python',  # Unique ID for this client
                  _host='localhost',         # Host to connect to
@@ -107,7 +108,11 @@ class DWX_ZeroMQ_Connector():
         
         # Verbosity
         self._verbose = _verbose
-        
+
+        """
+        # String to contain market data response message
+        self._marketDataResponse
+        """
     ##########################################################################
     
     """
@@ -361,28 +366,24 @@ class DWX_ZeroMQ_Connector():
     
     def _DWX_ZMQ_Poll_Data_(self, 
                            string_delimiter=';'):
-        
+
         while self._ACTIVE:
-            
             sockets = dict(self._poller.poll())
-            
             # Process response to commands sent to MetaTrader
             if self._PULL_SOCKET in sockets and sockets[self._PULL_SOCKET] == zmq.POLLIN:
-                
                 try:
-                    
                     msg = self._PULL_SOCKET.recv_string(zmq.DONTWAIT)
                     
                     # If data is returned, store as pandas Series
                     if msg != '' and msg != None:
-                        
+
                         try: 
                             _data = eval(msg)
                             
                             self._thread_data_output = _data
                             if self._verbose:
-                                print(_data) # default logic
-                                
+                                print(_data)  # default logic
+
                         except Exception as ex:
                             _exstr = "Exception Type {0}. Args:\n{1!r}"
                             _msg = _exstr.format(type(ex).__name__, ex.args)
@@ -397,7 +398,6 @@ class DWX_ZeroMQ_Connector():
             
             # Receive new market data from MetaTrader
             if self._SUB_SOCKET in sockets and sockets[self._SUB_SOCKET] == zmq.POLLIN:
-                
                 try:
                     msg = self._SUB_SOCKET.recv_string(zmq.DONTWAIT)
                     
@@ -408,7 +408,7 @@ class DWX_ZeroMQ_Connector():
                         
                         if self._verbose:
                             print("\n[" + _symbol + "] " + _timestamp + " (" + _bid + "/" + _ask + ") BID/ASK")
-                    
+
                         # Update Market Data DB
                         if _symbol not in self._Market_Data_DB.keys():
                             self._Market_Data_DB[_symbol] = {}

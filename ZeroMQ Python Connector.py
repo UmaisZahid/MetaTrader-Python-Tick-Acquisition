@@ -133,7 +133,7 @@ class DWX_ZeroMQ_Connector():
         try:
             _socket.send_string(_data, zmq.DONTWAIT)
         except zmq.error.Again:
-            print("\nResource timeout.. please try again.")
+            print("\nResource timeout during send.. please try again.")
             sleep(0.000000001)
       
     ##########################################################################
@@ -173,7 +173,7 @@ class DWX_ZeroMQ_Connector():
             msg = _socket.recv_string(zmq.DONTWAIT)
             return msg
         except zmq.error.Again:
-            print("\nResource timeout.. please try again.")
+            print("\nResource timeout during receive.. please try again.")
             sleep(0.000001)
             
         return None

@@ -1,0 +1,7 @@
+// TO DO
+
+- Add message ID parameter to both client and server messages so that you can verify responses
+- Create function to obtain response to a certain message (with unique message ID), with timeout and error print if longer
+    response time parameter (seconds)
+
+

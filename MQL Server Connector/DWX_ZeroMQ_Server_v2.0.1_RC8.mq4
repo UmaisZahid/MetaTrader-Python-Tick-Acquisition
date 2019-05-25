@@ -187,7 +187,7 @@ ZmqMsg MessageHandler(ZmqMsg &_request) {
    ZmqMsg reply;
    
    // Message components for later.
-   string components[11];
+   string components[12];
    
    if(_request.size() > 0) {
    
@@ -218,7 +218,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
    // Message Structures:
    
    // 1) Trading
-   // TRADE|ACTION|TYPE|SYMBOL|PRICE|SL|TP|COMMENT|TICKET
+   // MESSAGEID|TRADE|ACTION|TYPE|SYMBOL|PRICE|SL|TP|COMMENT|TICKET
    // e.g. TRADE|OPEN|1|EURUSD|0|50|50|R-to-MetaTrader4|12345678
    
    // The 12345678 at the end is the ticket ID, for MODIFY and CLOSE.
@@ -227,18 +227,22 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
    
    // 2.1) RATES|SYMBOL   -> Returns Current Bid/Ask
    
-   // 2.2) DATA|SYMBOL|TIMEFRAME|START_DATETIME|END_DATETIME
+   // 2.2) MESSAGEID|DATA|SYMBOL|TIMEFRAME|START_DATETIME|END_DATETIME
    
    // NOTE: datetime has format: D'2015.01.01 00:00'
    
    /*
-      compArray[0] = TRADE or RATES
-      If RATES -> compArray[1] = Symbol
+      compArray[1] = TRADE or RATES
+      If RATES -> 
+         compArray[2] = Symbol
+         compArray[3] = Timeframe (1 = 1 minute, 1440 = 1 day, etc.)
+         compArray[4] = Start Time
+         compArray[5] = Stop Time
       
       If TRADE ->
-         compArray[0] = TRADE
-         compArray[1] = ACTION (e.g. OPEN, MODIFY, CLOSE)
-         compArray[2] = TYPE (e.g. OP_BUY, OP_SELL, etc - only used when ACTION=OPEN)
+         compArray[1] = TRADE
+         compArray[2] = ACTION (e.g. OPEN, MODIFY, CLOSE)
+         compArray[3] = TYPE (e.g. OP_BUY, OP_SELL, etc - only used when ACTION=OPEN)
          
          // ORDER TYPES: 
          // https://docs.mql4.com/constants/tradingconstants/orderproperties
@@ -250,33 +254,33 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          // OP_BUYSTOP = 4
          // OP_SELLSTOP = 5
          
-         compArray[3] = Symbol (e.g. EURUSD, etc.)
-         compArray[4] = Open/Close Price (ignored if ACTION = MODIFY)
-         compArray[5] = SL
-         compArray[6] = TP
-         compArray[7] = Trade Comment
-         compArray[8] = Lots
-         compArray[9] = Magic Number
-         compArray[10] = Ticket Number (MODIFY/CLOSE)
+         compArray[4] = Symbol (e.g. EURUSD, etc.)
+         compArray[5] = Open/Close Price (ignored if ACTION = MODIFY)
+         compArray[6] = SL
+         compArray[7] = TP
+         compArray[8] = Trade Comment
+         compArray[9] = Lots
+         compArray[10] = Magic Number
+         compArray[11] = Ticket Number (MODIFY/CLOSE)
    */
    
    int switch_action = 0;
    
-   if(compArray[0] == "TRADE" && compArray[1] == "OPEN")
+   if(compArray[1] == "TRADE" && compArray[1] == "OPEN")
       switch_action = 1;
-   if(compArray[0] == "TRADE" && compArray[1] == "MODIFY")
+   if(compArray[1] == "TRADE" && compArray[1] == "MODIFY")
       switch_action = 2;
-   if(compArray[0] == "TRADE" && compArray[1] == "CLOSE")
+   if(compArray[1] == "TRADE" && compArray[1] == "CLOSE")
       switch_action = 3;
-   if(compArray[0] == "TRADE" && compArray[1] == "CLOSE_PARTIAL")
+   if(compArray[1] == "TRADE" && compArray[1] == "CLOSE_PARTIAL")
       switch_action = 4;
-   if(compArray[0] == "TRADE" && compArray[1] == "CLOSE_MAGIC")
+   if(compArray[1] == "TRADE" && compArray[1] == "CLOSE_MAGIC")
       switch_action = 5;
-   if(compArray[0] == "TRADE" && compArray[1] == "CLOSE_ALL")
+   if(compArray[1] == "TRADE" && compArray[1] == "CLOSE_ALL")
       switch_action = 6;
-   if(compArray[0] == "TRADE" && compArray[1] == "GET_OPEN_TRADES")
+   if(compArray[1] == "TRADE" && compArray[1] == "GET_OPEN_TRADES")
       switch_action = 7;
-   if(compArray[0] == "DATA")
+   if(compArray[1] == "DATA")
       switch_action = 8;
    
    string zmq_ret = "";
@@ -288,12 +292,12 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
    {
       case 1: // OPEN TRADE
          
-         zmq_ret = "{";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
          
          // Function definition:
-         ticket = DWX_OpenOrder(compArray[3], StrToInteger(compArray[2]), StrToDouble(compArray[8]), 
-                                 StrToDouble(compArray[4]), StrToInteger(compArray[5]), StrToInteger(compArray[6]), 
-                                 compArray[7], StrToInteger(compArray[9]), zmq_ret);
+         ticket = DWX_OpenOrder(compArray[4], StrToInteger(compArray[3]), StrToDouble(compArray[9]), 
+                                 StrToDouble(compArray[5]), StrToInteger(compArray[6]), StrToInteger(compArray[7]), 
+                                 compArray[8], StrToInteger(compArray[10]), zmq_ret);
                                  
          // Send TICKET back as JSON
          InformPullClient(pSocket, zmq_ret + "}");
@@ -302,12 +306,12 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
       case 2: // MODIFY SL/TP
       
-         zmq_ret = "{'_action': 'MODIFY'";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", '_action': 'MODIFY'";
          
          // Function definition:
-         ans = DWX_SetSLTP(StrToInteger(compArray[10]), StrToDouble(compArray[5]), StrToDouble(compArray[6]), 
-                           StrToInteger(compArray[9]), StrToInteger(compArray[2]), StrToDouble(compArray[4]), 
-                           compArray[3], 3, zmq_ret);
+         ans = DWX_SetSLTP(StrToInteger(compArray[11]), StrToDouble(compArray[6]), StrToDouble(compArray[7]), 
+                           StrToInteger(compArray[10]), StrToInteger(compArray[3]), StrToDouble(compArray[5]), 
+                           compArray[4], 3, zmq_ret);
          
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -315,10 +319,10 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
       case 3: // CLOSE TRADE
       
-         zmq_ret = "{";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
          
          // IMPLEMENT CLOSE TRADE LOGIC HERE
-         DWX_CloseOrder_Ticket(StrToInteger(compArray[10]), zmq_ret);
+         DWX_CloseOrder_Ticket(StrToInteger(compArray[11]), zmq_ret);
          
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -326,9 +330,9 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
       
       case 4: // CLOSE PARTIAL
       
-         zmq_ret = "{";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
          
-         ans = DWX_ClosePartial(StrToDouble(compArray[8]), zmq_ret, StrToInteger(compArray[10]));
+         ans = DWX_ClosePartial(StrToDouble(compArray[9]), zmq_ret, StrToInteger(compArray[11]));
             
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -336,9 +340,9 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
       case 5: // CLOSE MAGIC
       
-         zmq_ret = "{";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
          
-         DWX_CloseOrder_Magic(StrToInteger(compArray[9]), zmq_ret);
+         DWX_CloseOrder_Magic(StrToInteger(compArray[10]), zmq_ret);
             
          InformPullClient(pSocket, zmq_ret + "}");
          
@@ -346,7 +350,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
       case 6: // CLOSE ALL ORDERS
       
-         zmq_ret = "{";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
          
          DWX_CloseAllOrders(zmq_ret);
             
@@ -356,7 +360,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
       
       case 7: // GET OPEN ORDERS
       
-         zmq_ret = "{";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
          
          DWX_GetOpenOrders(zmq_ret);
             
@@ -366,7 +370,7 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
             
       case 8: // DATA REQUEST
          
-         zmq_ret = "{";
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
          
          DWX_GetData(compArray, zmq_ret);
          
@@ -422,18 +426,18 @@ void DWX_GetData(string& compArray[], string& zmq_ret) {
    int timeError = 0;
    
    // Get prices
-   int price_count = CopyClose(compArray[1], 
-                  StrToInteger(compArray[2]), StrToTime(compArray[3]),
-                  StrToTime(compArray[4]), price_array);
+   int price_count = CopyClose(compArray[2], 
+                  StrToInteger(compArray[3]), StrToTime(compArray[4]),
+                  StrToTime(compArray[5]), price_array);
                   
    if (price_count == -1){
       priceError = GetLastError();
    }               
    
    // Get timestamps
-   int time_count = CopyTime(compArray[1], 
-                  StrToInteger(compArray[2]), StrToTime(compArray[3]),
-                  StrToTime(compArray[4]), time_array);
+   int time_count = CopyTime(compArray[2], 
+                  StrToInteger(compArray[3]), StrToTime(compArray[4]),
+                  StrToTime(compArray[5]), time_array);
                   
    if (price_count == -1){
       timeError = GetLastError();

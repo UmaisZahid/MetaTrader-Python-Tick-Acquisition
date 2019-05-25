@@ -17,6 +17,8 @@
 
 # IMPORT zmq library
 # import zmq, time
+import random
+
 import zmq
 from time import sleep
 from pandas import DataFrame, Timestamp, Timedelta, Series
@@ -151,7 +153,7 @@ class DWX_ZeroMQ_Connector():
     def _valid_response_(self, _input='zmq'):
         
         # Valid data types
-        _types = (dict,DataFrame)
+        _types = (dict, DataFrame)
         
         # If _input = 'zmq', assume self._zmq._thread_data_output
         if isinstance(_input, str) and _input == 'zmq':
@@ -179,7 +181,18 @@ class DWX_ZeroMQ_Connector():
         return None
         
     ##########################################################################
-    
+
+    ##########################################################################
+
+    """
+    Function to generate a random message ID
+    """
+
+    def generateMessageID(self):
+        return random.randint(0, 2000000000)
+
+    ##########################################################################
+
     # Convenience functions to permit easy trading via underlying functions.
     
     # OPEN ORDER
@@ -189,8 +202,9 @@ class DWX_ZeroMQ_Connector():
             _order = self._generate_default_order_dict()
         
         # Execute
-        self._DWX_MTX_SEND_COMMAND_(**_order)
-        
+        messageID = self._DWX_MTX_SEND_COMMAND_(**_order)
+
+        return messageID
     # MODIFY ORDER
     def _DWX_MTX_MODIFY_TRADE_BY_TICKET_(self, _ticket, _SL, _TP): # in points
         
@@ -201,23 +215,28 @@ class DWX_ZeroMQ_Connector():
             self.temp_order_dict['_ticket'] = _ticket
             
             # Execute
-            self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
+            messageID = -1
             print("[ERROR] Order Ticket {} not found!".format(_ticket))
-    
+
+        return messageID
     # CLOSE ORDER
     def _DWX_MTX_CLOSE_TRADE_BY_TICKET_(self, _ticket):
         
         try:
             self.temp_order_dict['_action'] = 'CLOSE'
             self.temp_order_dict['_ticket'] = _ticket
-            
+
             # Execute
-            self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
+            messageID = -1
             print("[ERROR] Order Ticket {} not found!".format(_ticket))
+
+        return messageID
             
     # CLOSE PARTIAL
     def _DWX_MTX_CLOSE_PARTIAL_BY_TICKET_(self, _ticket, _lots):
@@ -226,12 +245,15 @@ class DWX_ZeroMQ_Connector():
             self.temp_order_dict['_action'] = 'CLOSE_PARTIAL'
             self.temp_order_dict['_ticket'] = _ticket
             self.temp_order_dict['_lots'] = _lots
-            
+
             # Execute
-            self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
+            messageID = -1
             print("[ERROR] Order Ticket {} not found!".format(_ticket))
+
+        return messageID
             
     # CLOSE MAGIC
     def _DWX_MTX_CLOSE_TRADES_BY_MAGIC_(self, _magic):
@@ -239,37 +261,49 @@ class DWX_ZeroMQ_Connector():
         try:
             self.temp_order_dict['_action'] = 'CLOSE_MAGIC'
             self.temp_order_dict['_magic'] = _magic
-            
+
             # Execute
-            self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
-            pass
+            messageID = -1
+            print("KeyError during temp_order_dict index search for _action or _magic")
+
+        return messageID
     
     # CLOSE ALL TRADES
     def _DWX_MTX_CLOSE_ALL_TRADES_(self):
         
         try:
             self.temp_order_dict['_action'] = 'CLOSE_ALL'
-            
+
             # Execute
-            self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
-            pass
-        
+            messageID = -1
+            print("KeyError during temp_order_dict index search for _action")
+
+        return messageID
+
+
     # GET OPEN TRADES
     def _DWX_MTX_GET_ALL_OPEN_TRADES_(self):
-        
+
         try:
             self.temp_order_dict['_action'] = 'GET_OPEN_TRADES'
                         
             # Execute
-            self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
-            
+            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+
         except KeyError:
-            pass
-    
+            messageID = -1
+            print("KeyError during temp_order_dict index search for _action")
+
+        return messageID
+
+
+
     # DEFAULT ORDER DICT
     def _generate_default_order_dict(self):
         return({'_action': 'OPEN',
@@ -301,15 +335,16 @@ class DWX_ZeroMQ_Connector():
                                  _start='2019.01.04 17:00:00',
                                  _end=Timestamp.now().strftime('%Y.%m.%d %H:%M:00')):
                                  #_end='2019.01.04 17:05:00'):
-        
-        _msg = "{};{};{};{};{}".format('DATA',
+        messageID = self.generateMessageID()
+        _msg = "{};{};{};{};{};{}".format(messageID, 'DATA',
                                      _symbol,
                                      _timeframe,
                                      _start,
                                      _end)
         # Send via PUSH Socket
         self.remote_send(self._PUSH_SOCKET, _msg)
-    
+
+        return messageID
     
     ##########################################################################
     """
@@ -319,8 +354,10 @@ class DWX_ZeroMQ_Connector():
                                  _symbol='EURUSD', _price=0.0,
                                  _SL=50, _TP=50, _comment="Python-to-MT",
                                  _lots=0.01, _magic=123456, _ticket=0):
-        
-        _msg = "{};{};{};{};{};{};{};{};{};{};{}".format('TRADE',_action,_type,
+
+        messageID = self.generateMessageID()
+
+        _msg = "{};{};{};{};{};{};{};{};{};{};{};{}".format(messageID,'TRADE',_action,_type,
                                                          _symbol,_price,
                                                          _SL,_TP,_comment,
                                                          _lots,_magic,
@@ -328,6 +365,8 @@ class DWX_ZeroMQ_Connector():
         
         # Send via PUSH Socket
         self.remote_send(self._PUSH_SOCKET, _msg)
+
+        return messageID
         
         """
          compArray[0] = TRADE or DATA

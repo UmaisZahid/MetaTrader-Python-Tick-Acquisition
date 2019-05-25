@@ -18,6 +18,7 @@
 # IMPORT zmq library
 # import zmq, time
 import random
+import timeit
 
 import zmq
 from time import sleep
@@ -106,7 +107,7 @@ class DWX_ZeroMQ_Connector():
         self.temp_order_dict = self._generate_default_order_dict()
         
         # Thread returns the most recently received DATA block here
-        self._thread_data_output = None
+        self._thread_data_output = {'_messageID': 0}  # Default messageID
         
         # Verbosity
         self._verbose = _verbose
@@ -140,8 +141,19 @@ class DWX_ZeroMQ_Connector():
       
     ##########################################################################
     
-    def _get_response_(self):
-        return self._thread_data_output
+    def _get_response_(self, messageID = None, maximumTime = 3):
+        if messageID == None:
+            return self._thread_data_output
+        else:
+            startTime = timeit.default_timer()
+
+            while timeit.default_timer() < (startTime + maximumTime):
+                if self._thread_data_output['_messageID'] == messageID:
+                    return self._thread_data_output
+
+            print("Message with requested ID could not be found")
+            return {'_messageID':-1}
+
     
     ##########################################################################
     
@@ -200,11 +212,9 @@ class DWX_ZeroMQ_Connector():
         
         if _order is None:
             _order = self._generate_default_order_dict()
-        
-        # Execute
-        messageID = self._DWX_MTX_SEND_COMMAND_(**_order)
 
-        return messageID
+        return self._DWX_MTX_SEND_COMMAND_(**_order)
+
     # MODIFY ORDER
     def _DWX_MTX_MODIFY_TRADE_BY_TICKET_(self, _ticket, _SL, _TP): # in points
         
@@ -215,13 +225,12 @@ class DWX_ZeroMQ_Connector():
             self.temp_order_dict['_ticket'] = _ticket
             
             # Execute
-            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            return self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
-            messageID = -1
             print("[ERROR] Order Ticket {} not found!".format(_ticket))
+            return -1
 
-        return messageID
     # CLOSE ORDER
     def _DWX_MTX_CLOSE_TRADE_BY_TICKET_(self, _ticket):
         
@@ -230,13 +239,12 @@ class DWX_ZeroMQ_Connector():
             self.temp_order_dict['_ticket'] = _ticket
 
             # Execute
-            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            return self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
-            messageID = -1
             print("[ERROR] Order Ticket {} not found!".format(_ticket))
+            return -1
 
-        return messageID
             
     # CLOSE PARTIAL
     def _DWX_MTX_CLOSE_PARTIAL_BY_TICKET_(self, _ticket, _lots):
@@ -247,29 +255,26 @@ class DWX_ZeroMQ_Connector():
             self.temp_order_dict['_lots'] = _lots
 
             # Execute
-            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            return self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
-            messageID = -1
             print("[ERROR] Order Ticket {} not found!".format(_ticket))
+            return -1
 
-        return messageID
-            
     # CLOSE MAGIC
     def _DWX_MTX_CLOSE_TRADES_BY_MAGIC_(self, _magic):
-        
+
         try:
             self.temp_order_dict['_action'] = 'CLOSE_MAGIC'
             self.temp_order_dict['_magic'] = _magic
 
             # Execute
-            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
-            
-        except KeyError:
-            messageID = -1
-            print("KeyError during temp_order_dict index search for _action or _magic")
+            return self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
 
-        return messageID
+        except KeyError:
+            print("KeyError during temp_order_dict index search for _action or _magic")
+            return -1
+
     
     # CLOSE ALL TRADES
     def _DWX_MTX_CLOSE_ALL_TRADES_(self):
@@ -278,13 +283,12 @@ class DWX_ZeroMQ_Connector():
             self.temp_order_dict['_action'] = 'CLOSE_ALL'
 
             # Execute
-            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            return self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
             
         except KeyError:
-            messageID = -1
             print("KeyError during temp_order_dict index search for _action")
+            return -1
 
-        return messageID
 
 
     # GET OPEN TRADES
@@ -294,13 +298,11 @@ class DWX_ZeroMQ_Connector():
             self.temp_order_dict['_action'] = 'GET_OPEN_TRADES'
                         
             # Execute
-            messageID = self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
+            return self._DWX_MTX_SEND_COMMAND_(**self.temp_order_dict)
 
         except KeyError:
-            messageID = -1
             print("KeyError during temp_order_dict index search for _action")
-
-        return messageID
+            return -1
 
 
 
@@ -368,34 +370,33 @@ class DWX_ZeroMQ_Connector():
 
         return messageID
         
-        """
-         compArray[0] = TRADE or DATA
-         compArray[1] = ACTION (e.g. OPEN, MODIFY, CLOSE)
-         compArray[2] = TYPE (e.g. OP_BUY, OP_SELL, etc - only used when ACTION=OPEN)
-         
-         For compArray[0] == DATA, format is: 
-             DATA|SYMBOL|TIMEFRAME|START_DATETIME|END_DATETIME
-         
-         // ORDER TYPES: 
-         // https://docs.mql4.com/constants/tradingconstants/orderproperties
-         
-         // OP_BUY = 0
-         // OP_SELL = 1
-         // OP_BUYLIMIT = 2
-         // OP_SELLLIMIT = 3
-         // OP_BUYSTOP = 4
-         // OP_SELLSTOP = 5
-         
-         compArray[3] = Symbol (e.g. EURUSD, etc.)
-         compArray[4] = Open/Close Price (ignored if ACTION = MODIFY)
-         compArray[5] = SL
-         compArray[6] = TP
-         compArray[7] = Trade Comment
-         compArray[8] = Lots
-         compArray[9] = Magic Number
-         compArray[10] = Ticket Number (MODIFY/CLOSE)
-         """
-        # pass
+    """
+     compArray[0] = TRADE or DATA
+     compArray[1] = ACTION (e.g. OPEN, MODIFY, CLOSE)
+     compArray[2] = TYPE (e.g. OP_BUY, OP_SELL, etc - only used when ACTION=OPEN)
+     
+     For compArray[0] == DATA, format is: 
+         DATA|SYMBOL|TIMEFRAME|START_DATETIME|END_DATETIME
+     
+     // ORDER TYPES: 
+     // https://docs.mql4.com/constants/tradingconstants/orderproperties
+     
+     // OP_BUY = 0
+     // OP_SELL = 1
+     // OP_BUYLIMIT = 2
+     // OP_SELLLIMIT = 3
+     // OP_BUYSTOP = 4
+     // OP_SELLSTOP = 5
+     
+     compArray[3] = Symbol (e.g. EURUSD, etc.)
+     compArray[4] = Open/Close Price (ignored if ACTION = MODIFY)
+     compArray[5] = SL
+     compArray[6] = TP
+     compArray[7] = Trade Comment
+     compArray[8] = Lots
+     compArray[9] = Magic Number
+     compArray[10] = Ticket Number (MODIFY/CLOSE)
+     """
     
     ##########################################################################
     
@@ -415,10 +416,8 @@ class DWX_ZeroMQ_Connector():
                     
                     # If data is returned, store as pandas Series
                     if msg != '' and msg != None:
-
                         try: 
                             _data = eval(msg)
-                            
                             self._thread_data_output = _data
                             if self._verbose:
                                 print(_data)  # default logic

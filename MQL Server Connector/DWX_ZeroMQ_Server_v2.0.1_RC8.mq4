@@ -473,13 +473,16 @@ void DWX_GetData(string& compArray[], string& zmq_ret) {
       }
       
       zmq_ret = zmq_ret + "}";
+      Print(zmq_ret);
       
    }  
    else if ((price_count == -1)) {
       zmq_ret = zmq_ret + ", " + "'_response': '" + IntegerToString(priceError) + "', 'response_value': '" + ErrorDescription(priceError) + "'";  
+      Print(zmq_ret);
    }
    else {
       zmq_ret = zmq_ret + ", " + "'_response': 'NOT_AVAILABLE'";
+      Print(zmq_ret);
    }
          
 }
@@ -509,25 +512,31 @@ void DWX_GetRatesData(string& compArray[], string& zmq_ret) {
       // Construct string of price|price|price|.. etc and send to PULL client.
       for(int i = 0; i < rates_count; i++ ) {
          
-         if(i == 0)
+         if(i == 0){
             zmq_ret = zmq_ret + "'" + TimeToString(rates_array[i].time) + "': [" + DoubleToString(rates_array[i].open) + ", " + DoubleToString(rates_array[i].high) + ", " 
-            + DoubleToString(rates_array[i].low) + ", " +  DoubleToString(rates_array[i].close) + ", " + (string)(rates_array[i].tick_volume) + ", " + (string)(rates_array[i].spread)
+            + DoubleToString(rates_array[i].low) + ", " +  DoubleToString(rates_array[i].close) + ", " + (string)(rates_array[i].tick_volume) + ", " + IntegerToString(rates_array[i].spread)
             + ", " + (string)(rates_array[i].real_volume) + ", " +  "]"; 
-         else
+            
+            Print((string)(rates_array[i].tick_volume) + ", " + rates_array[i].spread + ", " + rates_array[i].real_volume);
+            }
+         else{
             zmq_ret = zmq_ret + ", '" + TimeToString(rates_array[i].time) + "': [" + DoubleToString(rates_array[i].open) + ", " + DoubleToString(rates_array[i].high) + ", " 
-            + DoubleToString(rates_array[i].low) + ", " +  DoubleToString(rates_array[i].close) + ", " + (string)(rates_array[i].tick_volume) + ", " + (string)(rates_array[i].spread)
+            + DoubleToString(rates_array[i].low) + ", " +  DoubleToString(rates_array[i].close) + ", " + (string)(rates_array[i].tick_volume) + ", " + IntegerToString(rates_array[i].spread)
             + ", " + (string)(rates_array[i].real_volume) + ", " +  "]"; 
-       
+         }
       }
       
       zmq_ret = zmq_ret + "}";
+      Print(zmq_ret);
       
    }  
    else if ((rates_count == -1)) {
-      zmq_ret = zmq_ret + ", " + "'_response': '" + IntegerToString(ratesError) + "', 'response_value': '" + ErrorDescription(ratesError) + "'";  
+      zmq_ret = zmq_ret + ", " + "'_response': '" + IntegerToString(ratesError) + "', 'response_value': '" + ErrorDescription(ratesError) + "'";
+      Print(zmq_ret);  
    }
    else {
       zmq_ret = zmq_ret + ", " + "'_response': 'NOT_AVAILABLE'";
+      Print(zmq_ret);
    }
          
 }
@@ -991,6 +1000,7 @@ string ErrorDescription(int error_code)
       case 4064: error_string="double parameter expected";                                break;
       case 4065: error_string="array as parameter expected";                              break;
       case 4066: error_string="requested history data in update state";                   break;
+      case 4073: error_string="No history data";                                          break;
       case 4099: error_string="end of file";                                              break;
       case 4100: error_string="some file error";                                          break;
       case 4101: error_string="wrong file name";                                          break;

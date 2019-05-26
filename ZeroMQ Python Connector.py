@@ -151,7 +151,8 @@ class DWX_ZeroMQ_Connector():
                 if self._thread_data_output['_messageID'] == messageID:
                     return self._thread_data_output
 
-            print("Message with requested ID could not be found")
+            print("Message with requested ID could not be found \n")
+            print("Current message in memory: " + self._thread_data_output)
             return {'_messageID':-1}
 
     

@@ -347,7 +347,28 @@ class DWX_ZeroMQ_Connector():
         self.remote_send(self._PUSH_SOCKET, _msg)
 
         return messageID
-    
+
+    ##########################################################################
+    """
+    Function to construct messages for requested rates data from MetaTrader
+    """
+    def _DWX_MTX_SEND_RATESDATA_REQUEST_(self,
+                                 _symbol='EURUSD',
+                                 _timeframe=1,
+                                 _start='2019.01.04 17:00:00',
+                                 _end=Timestamp.now().strftime('%Y.%m.%d %H:%M:00')):
+                                 #_end='2019.01.04 17:05:00'):
+        messageID = self.generateMessageID()
+        _msg = "{};{};{};{};{};{}".format(messageID, 'DATA_RATES',
+                                     _symbol,
+                                     _timeframe,
+                                     _start,
+                                     _end)
+        # Send via PUSH Socket
+        self.remote_send(self._PUSH_SOCKET, _msg)
+
+        return messageID
+
     ##########################################################################
     """
     Function to construct messages for sending Trade commands to MetaTrader

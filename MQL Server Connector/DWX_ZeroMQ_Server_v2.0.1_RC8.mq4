@@ -282,6 +282,8 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
       switch_action = 7;
    if(compArray[1] == "DATA")
       switch_action = 8;
+   if(compArray[1] == "DATA_RATES")
+      switch_action = 9;   
    
    string zmq_ret = "";
    string ret = "";
@@ -378,6 +380,17 @@ void InterpretZmqMessage(Socket &pSocket, string &compArray[]) {
          
          break;
          
+      case 9: // DATA REQUEST
+         
+         zmq_ret = "{'_messageID': " + IntegerToString(compArray[0]) + ", ";
+         
+         DWX_GetRatesData(compArray, zmq_ret);
+         
+         InformPullClient(pSocket, zmq_ret + "}");
+         
+         break;
+         
+            
       default: 
          break;
    }
@@ -470,6 +483,55 @@ void DWX_GetData(string& compArray[], string& zmq_ret) {
    }
          
 }
+
+// Get rates data for request datetime range
+void DWX_GetRatesData(string& compArray[], string& zmq_ret) {
+         
+   // Format: MESSAGEID|DATA|SYMBOL|TIMEFRAME|START_DATETIME|END_DATETIME
+   MqlRates rates_array[];
+   int ratesError = 0;
+   
+   // Get prices
+   int rates_count = CopyRates(compArray[2], 
+                  StrToInteger(compArray[3]), StrToTime(compArray[4]),
+                  StrToTime(compArray[5]), rates_array);
+                  
+   if (rates_count == -1){
+      ratesError = GetLastError();
+   }               
+   
+   zmq_ret = zmq_ret + "'_action': 'DATA'";
+               
+   if (rates_count > 0) {
+      
+      zmq_ret = zmq_ret + ", '_data': {";
+      
+      // Construct string of price|price|price|.. etc and send to PULL client.
+      for(int i = 0; i < rates_count; i++ ) {
+         
+         if(i == 0)
+            zmq_ret = zmq_ret + "'" + TimeToString(rates_array[i].time) + "': [" + DoubleToString(rates_array[i].open) + ", " + DoubleToString(rates_array[i].high) + ", " 
+            + DoubleToString(rates_array[i].low) + ", " +  DoubleToString(rates_array[i].close) + ", " + (string)(rates_array[i].tick_volume) + ", " + (string)(rates_array[i].spread)
+            + ", " + (string)(rates_array[i].real_volume) + ", " +  "]"; 
+         else
+            zmq_ret = zmq_ret + ", '" + TimeToString(rates_array[i].time) + "': [" + DoubleToString(rates_array[i].open) + ", " + DoubleToString(rates_array[i].high) + ", " 
+            + DoubleToString(rates_array[i].low) + ", " +  DoubleToString(rates_array[i].close) + ", " + (string)(rates_array[i].tick_volume) + ", " + (string)(rates_array[i].spread)
+            + ", " + (string)(rates_array[i].real_volume) + ", " +  "]"; 
+       
+      }
+      
+      zmq_ret = zmq_ret + "}";
+      
+   }  
+   else if ((rates_count == -1)) {
+      zmq_ret = zmq_ret + ", " + "'_response': '" + IntegerToString(ratesError) + "', 'response_value': '" + ErrorDescription(ratesError) + "'";  
+   }
+   else {
+      zmq_ret = zmq_ret + ", " + "'_response': 'NOT_AVAILABLE'";
+   }
+         
+}
+
 
 // Inform Client
 void InformPullClient(Socket& pSocket, string message) {

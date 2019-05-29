@@ -464,7 +464,7 @@ class DWX_ZeroMQ_Connector():
                     
                     if msg != "":
                         _symbol, _data = msg.split(" ")
-                        _bid, _ask = _data.split(string_delimiter)
+                        _bid, _ask = _data.split('|')
                         _timestamp = str(Timestamp.now('UTC'))[:-6]
                         
                         if self._verbose:

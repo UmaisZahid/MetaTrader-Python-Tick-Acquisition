@@ -21,6 +21,10 @@
 
 #include <Zmq/Zmq.mqh>
 
+#import "kernel32.dll"
+void GetSystemTimeAsFileTime(ulong &SystemTimeAsFileTime); // Returns the system time in 100 nsec units in a ulong
+#import
+
 extern string PROJECT_NAME = "DWX_ZeroMQ_MT4_Server";
 extern string ZEROMQ_PROTOCOL = "tcp";
 extern string HOSTNAME = "*";
@@ -39,8 +43,8 @@ extern bool DMA_MODE = true;
 extern string t1 = "--- ZeroMQ Configuration ---";
 extern bool Publish_MarketData = false;
 
-string Publish_Symbols[7] = {
-   "EURUSD","GBPUSD","USDJPY","USDCAD","AUDUSD","NZDUSD","USDCHF"
+string Publish_Symbols[] = {
+   "GBPUSD"
 };
 
 /*
@@ -67,6 +71,8 @@ Socket pubSocket(context, ZMQ_PUB);
 // VARIABLES FOR LATER
 uchar _data[];
 ZmqMsg request;
+ulong timeOne, timeTwo;
+
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -135,15 +141,24 @@ void OnTick()
    /*
       Use this OnTick() function to send market data to subscribed client.
    */
+   MqlTick last_tick;
+   string _tick;
    if(!IsStopped() && Publish_MarketData == true)
    {
+      
       for(int s = 0; s < ArraySize(Publish_Symbols); s++)
       {
+      
+         if(SymbolInfoTick(Publish_Symbols[s],last_tick))
+         {
+          _tick = StringFormat("%f;%f", last_tick.bid, last_tick.ask);
+         }
          // Python clients can subscribe to a price feed by setting
          // socket options to the symbol name. For example:
-         
-         string _tick = GetBidAsk(Publish_Symbols[s]);
-         Print("Sending " + Publish_Symbols[s] + " " + _tick + " to PUB Socket");
+         //GetSystemTimeAsFileTime(timeOne);
+         // Print("Sending " + Publish_Symbols[s] + " " + _tick + " to PUB Socket");
+         //Print("Tick at time: " + (string)(timeOne/10));
+         Print("Tick: " + _tick + ", Tick vol: " + last_tick.volume + " , Tick time: " + last_tick.time);
          ZmqMsg reply(StringFormat("%s %s", Publish_Symbols[s], _tick));
          pubSocket.send(reply, true);
       }

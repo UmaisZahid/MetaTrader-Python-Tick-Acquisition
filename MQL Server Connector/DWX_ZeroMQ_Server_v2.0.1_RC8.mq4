@@ -151,15 +151,15 @@ void OnTick()
       
          if(SymbolInfoTick(Publish_Symbols[s],last_tick))
          {
-          _tick = StringFormat("Bid:%f|Ask:%f|Time:%s|%s|LastDeal:%f|LastVol:%f|Flag:%u", last_tick.bid, last_tick.ask, TimeToString(last_tick.time), TimeToString(last_tick.time, TIME_SECONDS), last_tick.last, last_tick.volume, last_tick.flags);
+          _tick = StringFormat("%f|%f|%s %s|%f|%f|%u", last_tick.bid, last_tick.ask, TimeToString(last_tick.time, TIME_DATE), TimeToString(last_tick.time, TIME_SECONDS), last_tick.last, last_tick.volume, last_tick.flags);
          }
          // Python clients can subscribe to a price feed by setting
          // socket options to the symbol name. For example:
          //GetSystemTimeAsFileTime(timeOne);
          // Print("Sending " + Publish_Symbols[s] + " " + _tick + " to PUB Socket");
          //Print("Tick at time: " + (string)(timeOne/10));
-         Print("Tick: " + _tick);
-         ZmqMsg reply(StringFormat("%s %s", Publish_Symbols[s], _tick));
+         Print("Message:" + StringFormat("%s;%s", Publish_Symbols[s], _tick));
+         ZmqMsg reply(StringFormat("%s;%s", Publish_Symbols[s], _tick));
          pubSocket.send(reply, true);
       }
    }

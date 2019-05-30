@@ -23,6 +23,7 @@ import timeit
 import zmq
 from time import sleep
 from pandas import DataFrame, Timestamp, Timedelta, Series
+import pandas as pd
 from threading import Thread
 
 class DWX_ZeroMQ_Connector():
@@ -463,19 +464,21 @@ class DWX_ZeroMQ_Connector():
                     msg = self._SUB_SOCKET.recv_string(zmq.DONTWAIT)
                     
                     if msg != "":
-                        _symbol, _data = msg.split(" ")
-                        _bid, _ask = _data.split('|')
-                        _timestamp = str(Timestamp.now('UTC'))[:-6]
+                        _symbol, _data = msg.split(";")
+                        _bid, _ask, _timestamp, _lastdeal, _lastvol, _flag = _data.split('|')
                         
                         if self._verbose:
                             print("\n[" + _symbol + "] " + _timestamp + " (" + _bid + "/" + _ask + ") BID/ASK")
 
                         # Update Market Data DB
                         if _symbol not in self._Market_Data_DB.keys():
-                            self._Market_Data_DB[_symbol] = {}
+                            self._Market_Data_DB[_symbol] = []
                             
-                        self._Market_Data_DB[_symbol][_timestamp] = (float(_bid), float(_ask))
-                    
+                        self._Market_Data_DB[_symbol].append(
+                            {'Time':Timestamp.strptime(_timestamp, "%Y.%m.%d %H:%M:%S"), 'Bid': float(_bid),
+                             'Ask': float(_ask), 'Flag': int(_flag)}
+                        )
+
                 except zmq.error.Again:
                     pass # resource temporarily unavailable, nothing to print
                 except ValueError:
@@ -516,5 +519,13 @@ class DWX_ZeroMQ_Connector():
         
         self._setStatus(False)
         self._MarketData_Thread = None
-    
+
+    """
+        Function to clear out market data db
+        """
+
+    def clearMarketDataDB(self):
+
+        self._Market_Data_DB = {}
+
     ##########################################################################

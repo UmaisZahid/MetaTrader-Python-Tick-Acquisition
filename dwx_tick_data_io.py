@@ -108,20 +108,26 @@ class DWX_TICK_DATA_IO():
         _bid_files, _ask_files = self._find_symbol_files_(_symbol,_date,_hour)
         
         print('[INFO] Processing BID ({}) / ASK ({}) files.. please wait..'.format(len(_bid_files), len(_ask_files)))
-        
-        # BIDS
-        _bids = pd.concat([self._construct_data_(_bid_files[i]) 
+
+        _bid_dfs = [self._construct_data_(_bid_files[i])
                     for i in range(0, len(_bid_files)) if ((print('\rBIDS: {} / {} - {}'
-                                  .format(i+1,len(_bid_files),_bid_files[i]), end="", flush=True) or 1==1))], axis=0, sort=True)
+                                  .format(i+1,len(_bid_files),_bid_files[i]), end="", flush=True) or 1==1))]
+        print(len(_bid_dfs))
+        print(type(_bid_dfs[1]))
+
+        # BIDS
+        _bids = pd.concat(_bid_dfs, axis=0, sort=True)
         print('')
         
         # ASKS
-        _asks = pd.concat([self._construct_data_(_ask_files[i]) 
-                    for i in range(0, len(_ask_files)) if ((print('\rASKS: {} / {} - {}'
-                                  .format(i+1,len(_ask_files),_ask_files[i]), end="", flush=True) or 1==1))], axis=0, sort=True)
+        if len(_ask_files) != 0:
+            _ask_dfs = [self._construct_data_(_ask_files[i]) for i in range(0, len(_ask_files)) if (print('\rASKS: {} / {} - {}'
+                                      .format(i+1,len(_ask_files),_ask_files[i]), end="", flush=True) or 1==1)]
+            _asks = pd.concat(_ask_dfs, axis=0, sort=True)
                 
-        _df = _asks.merge(_bids, how='outer', left_index=True, right_index=True, copy=False).fillna(method='ffill').dropna()
-            
+            _df = _asks.merge(_bids, how='outer', left_index=True, right_index=True, copy=False).fillna(method='ffill').dropna()
+        else:
+            _df = _bids
         # Calculate spread?
         if _calc_spread:
             _df['spread'] = abs(np.diff(_df[['ask_price','bid_price']]))
@@ -136,8 +142,7 @@ class DWX_TICK_DATA_IO():
             
         # Resample?
         if _precision != 'tick':
-            # _df['mid_price'] = round((_df.ask_price + _df.bid_price) / 2, _symbol_digits)
-            _df['mid_price'] = _df.bid_price
+            _df['mid_price'] = round((_df.ask_price + _df.bid_price) / 2, _symbol_digits)
             if _precision not in ['B','C','D','W','24H']:
                 _df = _df.mid_price.resample(rule=_precision, label='left', closed='left').ohlc()
             else:

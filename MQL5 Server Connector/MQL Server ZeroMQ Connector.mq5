@@ -32,7 +32,7 @@ extern bool DMA_MODE = true;
 extern int MAX_SLIPPAGE = 3;
 
 // String array of symbols being published
-string Publish_Symbols[28] = {
+string Publish_Symbols[1] = {
    "GBPUSD"
 };
 
@@ -90,8 +90,9 @@ void OnTick()
    /*
       Use this OnTick() function to send market data to subscribed client.
    */
-   // Initialise message and tick variables
-   string returnMsg; 
+   // Initialise message and tick variables, get current time
+   string returnMsg;
+   Print("Tick received");
    createPrototypeMessage(returnMsg, "Data:Symbol:Time,Bid,Ask,Last,Vol,Flag"); 
    MqlTick last_tick;
    
@@ -102,7 +103,10 @@ void OnTick()
       // Append each symbols tick data to the message in the form of SymbolName:DATADICT.
       for(int s = 0; s < ArraySize(Publish_Symbols); s++){
          returnMsg = returnMsg + "'" + Publish_Symbols[s] + "': ";
-         addSymbolTicksToMessage(returnMsg, Publish_Symbols[s],NUM_OF_TICKS);
+         addSymbolTicksToMessage(returnMsg, Publish_Symbols[s], NUM_OF_TICKS);
+         if (s != (ArraySize(Publish_Symbols)-1)){
+            returnMsg = returnMsg + ", ";  
+         }
       }
       
       returnMsg = returnMsg + "}}"; // Once for data dict and once for total message dict
@@ -125,7 +129,7 @@ void OnDeinit(const int reason)
    Print("[PULL] Unbinding MT4 Server from Socket on Port " + IntegerToString(PUSH_PORT) + "..");
    pullSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PUSH_PORT));
    
-   if (Publish_MarketData == TRUE)
+   if (PUBLISH_MARKET_DATA == true)
    {
       Print("[PUB] Unbinding MT4 Server from Socket on Port " + IntegerToString(PUB_PORT) + "..");
       pubSocket.unbind(StringFormat("%s://%s:%d", ZEROMQ_PROTOCOL, HOSTNAME, PUB_PORT));
@@ -152,19 +156,23 @@ void createPrototypeMessage(string &msg, string msgType, int msgID = -1){
 //+---------------------------------------------------------------------------+
 //|  Appends a particular symbols tick data to an outgoing message            |
 //+---------------------------------------------------------------------------+ 
-void addSymbolTicksToMessage(string &msg, string symbol, int noOfTicks){
+void addSymbolTicksToMessage(string &msg, string symbol, int noOfTicks, datetime time = 0){
    // Assume message is already in state of 
    // { ....
    // 'Payload':{'SYMBOL':}
    // 
    
+   
+   if (time != 0){time = (ulong)time * 1000;} 
    msg = msg + "{";
+   Print((ulong)time);
    MqlTick ticks_array[];
    ArrayResize(ticks_array, noOfTicks);
-   int ticksCopied = CopyTicks(symbol, ticks_array,noOfTicks);
-   
+   int ticksCopied = CopyTicks(symbol, ticks_array, COPY_TICKS_ALL, time, noOfTicks);
+   Print((string)ticks_array[0].bid);
+   Print(ticksCopied);
    for(int x = 0; x < ticksCopied; x++){
-      msg = "'Time': ['" + TimeToString(ticks_array[x].time,TIME_DATE|TIME_SECONDS) + "', " + DoubleToString(ticks_array[x].bid) + ", " 
+      msg = msg + "'" + TimeToString(ticks_array[x].time,TIME_DATE|TIME_SECONDS) + "': [" + DoubleToString(ticks_array[x].bid) + ", " 
       + DoubleToString(ticks_array[x].ask) + ", " + DoubleToString(ticks_array[x].last) + ", " + DoubleToString(ticks_array[x].volume_real) + ", "
       + IntegerToString(ticks_array[x].flags);
       msg = msg + "]";

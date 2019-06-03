@@ -192,7 +192,7 @@ class DWX_ZeroMQ_Connector():
         except zmq.error.Again:
             print("\nResource timeout during receive.. please try again.")
             sleep(0.000001)
-            
+
         return None
         
     ##########################################################################

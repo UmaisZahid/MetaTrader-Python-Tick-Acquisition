@@ -165,11 +165,10 @@ void addSymbolTicksToMessage(string &msg, string symbol, int noOfTicks, datetime
    
    if (time != 0){time = (ulong)time * 1000;} 
    msg = msg + "{";
-   Print((ulong)time);
    MqlTick ticks_array[];
    ArrayResize(ticks_array, noOfTicks);
    int ticksCopied = CopyTicks(symbol, ticks_array, COPY_TICKS_ALL, time, noOfTicks);
-   Print((string)ticks_array[0].bid);
+   Print((string)ticks_array[noOfTicks-1].bid);
    Print(ticksCopied);
    for(int x = 0; x < ticksCopied; x++){
       msg = msg + "'" + TimeToString(ticks_array[x].time,TIME_DATE|TIME_SECONDS) + "': [" + DoubleToString(ticks_array[x].bid) + ", " 

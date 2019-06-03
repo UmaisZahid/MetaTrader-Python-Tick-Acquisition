@@ -18,6 +18,10 @@ from pandas import DataFrame, Timestamp, Timedelta, Series
 from threading import Thread
 import pandas as pd
 
+
+####################################
+# MTConnector Class Definition     #
+####################################
 class MTConnector():
 
     def __init__(self,
@@ -102,10 +106,23 @@ class MTConnector():
         # Verbosity
         self.VERBOSE = VERBOSE
 
-    """
-        Function to check Poller for new reponses (PULL) and market data (SUB)
-        """
+    ############################################
+    # Retrieve data from MetaTrader via ZMQ    #
+    ############################################
+    def remoteReceive(self, socket):
 
+        try:
+            msg = socket.recv_string(zmq.DONTWAIT)
+            return msg
+        except zmq.error.Again:
+            print("\nResource timeout during receive.. please try again.")
+            sleep(0.000001)
+
+        return None
+
+    ################################
+    # Check poller for new data    #
+    ################################
     def pollData(self):
 
         while self.ACTIVE:
@@ -139,10 +156,12 @@ class MTConnector():
 
             # Receive new market data from MetaTrader
             if self.SUB_SOCKET in sockets and sockets[self.SUB_SOCKET] == zmq.POLLIN:
+                print("Test Point 1")
                 try:
                     msg = self.SUB_SOCKET.recv_string(zmq.DONTWAIT)
-
+                    print("Test Point 2")
                     if msg != "":
+                        print("Test Point 3")
                         msgDict = eval(msg)
 
                         if self.VERBOSE:
@@ -157,6 +176,10 @@ class MTConnector():
                             self.MARKET_DATA_DB[incomingSymbol].append(
                                 DataFrame.from_dict(msgDict['Data'][incomingSymbol])
                             )
+                            # Temporary: Remove duplicates
+                            for key in self.MARKET_DATA_DB.keys():
+                                DataFrame.drop_duplicates(self.MARKET_DATA_DB[key], inplace=True)
+
                             # To Do:
                             # Implement clean up function to remove duplicates
 
@@ -169,3 +192,17 @@ class MTConnector():
 
     ##########################################################################
 
+    ###################################
+    # Subscribe to ticks from symbol  #
+    ###################################
+    def subscribeToSymbolTicks(self, symbol=""):
+
+        # Subscribe to SYMBOL first.
+        if symbol != "":
+            self.SUB_SOCKET.setsockopt_string(zmq.SUBSCRIBE, symbol)
+
+        if self.MARKET_DATA_THREAD is None:
+            self.MARKET_DATA_THREAD = Thread(target=self.pollData())
+            self.MARKET_DATA_THREAD.start()
+
+        print("[KERNEL] Subscribed to {} BID/ASK updates. See self.MARKET_DATA_DB.".format(symbol))

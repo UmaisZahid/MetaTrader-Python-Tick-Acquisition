@@ -126,62 +126,42 @@ class MTConnector():
     def pollData(self):
 
         while self.ACTIVE:
-
             sockets = dict(self.POLLER.poll())
             # Process response to commands sent to MetaTrader
-            if self.PULL_SOCKET in sockets and sockets[self.PULL_SOCKET] == zmq.POLLIN:
-                try:
-                    msg = self.PULL_SOCKET.recv_string(zmq.DONTWAIT)
-
-                    # If data is returned, store as pandas Series
-                    if msg != '' and msg != None:
-
-                        try:
-                            _data = eval(msg)
-                            self.THREAD_DATA_OUTPUT = _data
-                            if self.VERBOSE:
-                                print(_data)  # default logic
-
-                        except Exception as ex:
-                            _exstr = "Exception Type {0}. Args:\n{1!r}"
-                            _msg = _exstr.format(type(ex).__name__, ex.args)
-                            print(_msg)
-
-                except zmq.error.Again:
-                    pass  # resource temporarily unavailable, nothing to print
-                except ValueError:
-                    pass  # No data returned, passing iteration.
-                except UnboundLocalError:
-                    pass  # _symbol may sometimes get referenced before being assigned.
 
             # Receive new market data from MetaTrader
             if self.SUB_SOCKET in sockets and sockets[self.SUB_SOCKET] == zmq.POLLIN:
-                print("Test Point 1")
                 try:
                     msg = self.SUB_SOCKET.recv_string(zmq.DONTWAIT)
-                    print("Test Point 2")
                     if msg != "":
-                        print("Test Point 3")
                         msgDict = eval(msg)
 
                         if self.VERBOSE:
                             print(msgDict)
 
-                        for incomingSymbol in msgDict.keys():
-                            # Update Market Data DB
-                            if incomingSymbol not in self.MARKET_DATA_DB.keys():
-                                self.MARKET_DATA_DB[incomingSymbol] = DataFrame()
+                        try:
+                            for incomingSymbol in msgDict['Data'].keys():
 
-                            # Append data to DataFrame corresponding to that symbol
-                            self.MARKET_DATA_DB[incomingSymbol].append(
-                                DataFrame.from_dict(msgDict['Data'][incomingSymbol])
-                            )
-                            # Temporary: Remove duplicates
-                            for key in self.MARKET_DATA_DB.keys():
-                                DataFrame.drop_duplicates(self.MARKET_DATA_DB[key], inplace=True)
+                                # Update Market Data DB
+                                if incomingSymbol not in self.MARKET_DATA_DB.keys():
+                                    self.MARKET_DATA_DB[incomingSymbol] = DataFrame()
 
-                            # To Do:
-                            # Implement clean up function to remove duplicates
+                                # Remove duplicates if necessary
+                                if len(self.MARKET_DATA_DB[incomingSymbol].index) > 450:
+                                    self.MARKET_DATA_DB[incomingSymbol].drop_duplicates(inplace=True)
+
+                                # Append data to DataFrame corresponding to that symbol
+                                self.MARKET_DATA_DB[incomingSymbol] = self.MARKET_DATA_DB[incomingSymbol].append(
+                                    DataFrame.from_dict(msgDict['Data'][incomingSymbol], orient='index',
+                                                        columns=msgDict['MsgType'])
+                                )
+
+                                # To Do:
+                                # Implement clean up function to remove duplicates
+                        except Exception as ex:
+                            _exstr = "Exception Type {0}. Args:\n{1!r}"
+                            _msg = _exstr.format(type(ex).__name__, ex.args)
+                            print(_msg)
 
                 except zmq.error.Again:
                     pass  # resource temporarily unavailable, nothing to print
@@ -195,14 +175,19 @@ class MTConnector():
     ###################################
     # Subscribe to ticks from symbol  #
     ###################################
-    def subscribeToSymbolTicks(self, symbol=""):
+    def subscribeToSymbolTicks(self, symbol="{"):
 
         # Subscribe to SYMBOL first.
         if symbol != "":
             self.SUB_SOCKET.setsockopt_string(zmq.SUBSCRIBE, symbol)
 
         if self.MARKET_DATA_THREAD is None:
-            self.MARKET_DATA_THREAD = Thread(target=self.pollData())
+            self.MARKET_DATA_THREAD = Thread(target=self.pollData)
             self.MARKET_DATA_THREAD.start()
 
         print("[KERNEL] Subscribed to {} BID/ASK updates. See self.MARKET_DATA_DB.".format(symbol))
+
+    ###########################################################################################################
+    #                                      CONVENIENCE FUNCTIONS                                              #
+    ###########################################################################################################
+

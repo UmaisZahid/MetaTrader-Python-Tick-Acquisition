@@ -16,7 +16,6 @@ import zmq
 from time import sleep
 from pandas import DataFrame, Timestamp, Timedelta, Series
 from threading import Thread
-import pandas as pd
 
 
 ####################################
@@ -88,6 +87,9 @@ class MTConnector():
         #################################################################
 
         # BID/ASK Market Data Subscription Threads ({SYMBOL: Thread})
+
+
+        # BID/ASK Market Data Subscription Threads ({SYMBOL: Thread})
         self.MARKET_DATA_THREAD = None
 
         # Begin polling for PULL / SUB data
@@ -96,9 +98,6 @@ class MTConnector():
 
         # Market Data Dictionary by Symbol (holds tick data)
         self.MARKET_DATA_DB = {}  # dict of Pandas dataframe containing tick data
-
-        # Temporary Order STRUCT for convenience wrappers later.
-        # self.temp_order_dict = self._generate_default_order_dict()
 
         # Thread returns the most recently received DATA block here
         self.POLLER_DATA_OUTPUT = {}
@@ -125,17 +124,19 @@ class MTConnector():
     ################################
     def pollData(self):
 
+        print("Thread Begun")
         while self.ACTIVE:
+            print("Inner loop begun")
             sockets = dict(self.POLLER.poll())
-            # Process response to commands sent to MetaTrader
+            print("Inner inner loop begun")
 
+            # Process response to commands sent to MetaTrader
             # Receive new market data from MetaTrader
             if self.SUB_SOCKET in sockets and sockets[self.SUB_SOCKET] == zmq.POLLIN:
                 try:
                     msg = self.SUB_SOCKET.recv_string(zmq.DONTWAIT)
                     if msg != "":
                         msgDict = eval(msg)
-
                         if self.VERBOSE:
                             print(msgDict)
 
@@ -146,18 +147,12 @@ class MTConnector():
                                 if incomingSymbol not in self.MARKET_DATA_DB.keys():
                                     self.MARKET_DATA_DB[incomingSymbol] = DataFrame()
 
-                                # Remove duplicates if necessary
-                                if len(self.MARKET_DATA_DB[incomingSymbol].index) > 450:
-                                    self.MARKET_DATA_DB[incomingSymbol].drop_duplicates(inplace=True)
-
                                 # Append data to DataFrame corresponding to that symbol
                                 self.MARKET_DATA_DB[incomingSymbol] = self.MARKET_DATA_DB[incomingSymbol].append(
                                     DataFrame.from_dict(msgDict['Data'][incomingSymbol], orient='index',
                                                         columns=msgDict['MsgType'])
                                 )
 
-                                # To Do:
-                                # Implement clean up function to remove duplicates
                         except Exception as ex:
                             _exstr = "Exception Type {0}. Args:\n{1!r}"
                             _msg = _exstr.format(type(ex).__name__, ex.args)
@@ -187,7 +182,16 @@ class MTConnector():
 
         print("[KERNEL] Subscribed to {} BID/ASK updates. See self.MARKET_DATA_DB.".format(symbol))
 
-    ###########################################################################################################
-    #                                      CONVENIENCE FUNCTIONS                                              #
-    ###########################################################################################################
+###########################################################################################################
+#                                      CONVENIENCE FUNCTIONS                                              #
+###########################################################################################################
 
+
+###########################################################################################################
+#                                      Debugging                                                          #
+###########################################################################################################
+def main():
+    connector = MTConnector(VERBOSE=True)
+
+
+if __name__ == "__main__": main()

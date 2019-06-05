@@ -450,7 +450,7 @@ class DWX_ZeroMQ_Connector():
                             _exstr = "Exception Type {0}. Args:\n{1!r}"
                             _msg = _exstr.format(type(ex).__name__, ex.args)
                             print(_msg)
-               
+
                 except zmq.error.Again:
                     pass # resource temporarily unavailable, nothing to print
                 except ValueError:

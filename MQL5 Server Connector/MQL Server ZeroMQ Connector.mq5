@@ -11,25 +11,24 @@
 //+------------------------------------------------------------------+
 //| Properties                                                       |
 //+------------------------------------------------------------------+
-extern string t1 = "--- ZeroMQ Parameters ---";
-extern string PROJECT_NAME = "AutoTrader";
-extern string ZEROMQ_PROTOCOL = "tcp"; 
-extern string HOSTNAME = "*";
-extern int PUSH_PORT = 32768;
-extern int PULL_PORT = 32769;
-extern int PUB_PORT = 32770;
-extern int MILLISECOND_TIMER = 1;
-extern int SUB_TICK_WINDOW = 30;
-extern int HIGH_WATER_MARK = 1;
-extern bool PUBLISH_MARKET_DATA = true;
-extern int NUM_OF_TICKS = 30;
+input string t1 = "--- ZeroMQ Parameters ---";
+input string PROJECT_NAME = "AutoTrader";
+input string ZEROMQ_PROTOCOL = "tcp"; 
+input string HOSTNAME = "*";
+input int PUSH_PORT = 32768;
+input int PULL_PORT = 32769;
+input int PUB_PORT = 32770;
+input int MILLISECOND_TIMER = 1;
+input int SUB_TICK_WINDOW = 30;
+input int HIGH_WATER_MARK = 1;
+input bool PUBLISH_MARKET_DATA = true;
+input int NUM_OF_TICKS = 10;
 
-
-extern string t1 = "--- Trading Parameters ---";
-extern float MINIMUM_LOT = 0.01;
-extern double MAXIMUM_LOT = 0.02;
-extern bool DMA_MODE = true;
-extern int MAX_SLIPPAGE = 3;
+input string t2 = "--- Trading Parameters ---";
+input float MINIMUM_LOT = 0.01;
+input double MAXIMUM_LOT = 0.02;
+input bool DMA_MODE = true;
+input int MAX_SLIPPAGE = 3;
 
 // String array of symbols being published
 string Publish_Symbols[1] = {
@@ -38,6 +37,13 @@ string Publish_Symbols[1] = {
 
 // Integer storing current messages ID
 int MessageID;
+
+// Integer storing previous tick's time value and current tick's time value
+ulong previousTickTime;
+ulong currentTickTime;
+
+// Latest MQLTick
+MqlTick latestMQLTick;
 
 // CREATE ZeroMQ Context
 Context context(PROJECT_NAME);
@@ -51,9 +57,14 @@ Socket pullSocket(context, ZMQ_PULL);
 // CREATE ZMQ_PUB SOCKET
 Socket pubSocket(context, ZMQ_PUB);
 
+//Global Variables
+ZmqMsg request;
+
 int OnInit()
   {
-//---
+//--- 
+   previousTickTime = TimeCurrent();
+   currentTickTime = TimeCurrent();
    EventSetMillisecondTimer(MILLISECOND_TIMER);     // Set Millisecond Timer to get client socket input
    
    context.setBlocky(false); // Kinda useless since it sets linger time to 0 for all sockets but we've done that already explicitly
@@ -91,29 +102,10 @@ void OnTick()
       Use this OnTick() function to send market data to subscribed client.
    */
    // Initialise message and tick variables, get current time
-   string returnMsg;
-   Print("Tick received");
-   createPrototypeMessage(returnMsg, "Data:Symbol:Time,Bid,Ask,Last,Vol,Flag"); 
-   MqlTick last_tick;
+   
+   Print("Tick Received");
    
    
-   if(!IsStopped() && PUBLISH_MARKET_DATA == true){
-      returnMsg = returnMsg + "'Data': {";
-      
-      // Append each symbols tick data to the message in the form of SymbolName:DATADICT.
-      for(int s = 0; s < ArraySize(Publish_Symbols); s++){
-         returnMsg = returnMsg + "'" + Publish_Symbols[s] + "': ";
-         addSymbolTicksToMessage(returnMsg, Publish_Symbols[s], NUM_OF_TICKS);
-         if (s != (ArraySize(Publish_Symbols)-1)){
-            returnMsg = returnMsg + ", ";  
-         }
-      }
-      
-      returnMsg = returnMsg + "}}"; // Once for data dict and once for total message dict
-      ZmqMsg reply(returnMsg);
-      pubSocket.send(reply, true); // The boolean is "nowait" parameter. Presumable this means that it doesn't block until it can send
-      Print(returnMsg);
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -143,6 +135,78 @@ void OnDeinit(const int reason)
 }
 
 
+//+------------------------------------------------------------------------------------+
+//| Millisecond timer event function: poll for response and send out subscription data |
+//+------------------------------------------------------------------------------------+
+void OnTimer()
+{
+
+
+   // Get client's response, but don't block.
+   pullSocket.recv(request, true);
+   
+   if (request.size() > 0)
+   {
+      // Wait 
+      // pullSocket.recv(request,false);
+      
+      // MessageHandler() should go here.   
+      // ZmqMsg reply = MessageHandler(request);
+      
+      // Send response, and block
+      // pushSocket.send(reply);
+      
+      // Send response, but don't block
+      // pushSocket.send(reply, true);
+   }
+   
+   if (TimeCurrent() > currentTickTime){
+      previousTickTime = currentTickTime;
+      currentTickTime = TimeCurrent();
+      sendSubscriptions(previousTickTime, currentTickTime);
+   }
+      
+      
+      
+}
+
+
+//+------------------------------------------------------------------+
+//| Send Subscriptions Out                                           |
+//+------------------------------------------------------------------+
+void sendSubscriptions(ulong startT, ulong endT)
+{
+   /*
+      Use this OnTick() function to send market data to subscribed client.
+   */
+   // Initialise message and tick variables, get current time
+   string returnMsg;
+   bool sendMessage = false;
+   Print("Next Second Data:");
+   createPrototypeMessage(returnMsg, "['Bid','Ask','Last','Vol','Flag']"); 
+   
+   if(!IsStopped() && PUBLISH_MARKET_DATA == true){
+      returnMsg = returnMsg + "'Data': {";
+      
+      // Append each symbols tick data to the message in the form of SymbolName:DATADICT.
+      for(int s = 0; s < ArraySize(Publish_Symbols); s++){
+         sendMessage = sendMessage || addSymbolTicksToMessage(returnMsg, Publish_Symbols[s], startT, endT);
+         if (s != (ArraySize(Publish_Symbols)-1)){
+            returnMsg = returnMsg + ", ";  
+         }
+      }
+      if (sendMessage){
+         returnMsg = returnMsg + "}}"; // Once for data dict and once for total message dict
+         ZmqMsg reply(returnMsg);
+         pubSocket.send(reply, true); // The boolean is "nowait" parameter. Presumable this means that it doesn't block until it can send
+         Print(returnMsg);
+      }
+      else {
+         Print("No tick data for this second.");
+      }
+   }
+}
+
 
 //+---------------------------------------------------------------------------+
 //| Creates prototype message filling in msgid, msgtype and msgsrc parameters |
@@ -150,31 +214,57 @@ void OnDeinit(const int reason)
 void createPrototypeMessage(string &msg, string msgType, int msgID = -1){
    msg = "{'MsgID': " + msgID + ", ";
    msg = msg + "'MsgSrc': 'MT4', ";
-   msg = msg + "'MsgType': '" + msgType + "', ";
+   msg = msg + "'MsgType': " + msgType + ", ";
 }
 
 //+---------------------------------------------------------------------------+
 //|  Appends a particular symbols tick data to an outgoing message            |
 //+---------------------------------------------------------------------------+ 
-void addSymbolTicksToMessage(string &msg, string symbol, int noOfTicks, datetime time = 0){
+bool addSymbolTicksToMessage(string &msg, string symbol, ulong starttime, ulong endtime){
    // Assume message is already in state of 
    // { ....
    // 'Payload':{'SYMBOL':}
    // 
    
+   // Convert time to milliseconds
+   starttime = starttime * 1000;
+   endtime = endtime * 1000;
+   Print(starttime);
+   Print(endtime);
+   MqlTick ticks_array[]; // Array for ticks
    
-   if (time != 0){time = (ulong)time * 1000;} 
-   msg = msg + "{";
-   MqlTick ticks_array[];
-   ArrayResize(ticks_array, noOfTicks);
-   int ticksCopied = CopyTicks(symbol, ticks_array, COPY_TICKS_ALL, time, noOfTicks);
-   Print((string)ticks_array[noOfTicks-1].bid);
+   // Copy ticks
+   int ticksCopied = CopyTicksRange(symbol, ticks_array, COPY_TICKS_ALL, starttime, endtime-1);
+   
+   if (ticksCopied == 0){
+      return false;
+   }
+   else {
+   
+   msg = msg + "'" + symbol + "': ";
+   msg = msg + "{"; // Begin the symbol's data dict
+   
+
+   // Print((string)ticks_array[ticksCopied-1].bid);
    Print(ticksCopied);
+   
+   
+   // Copy each tick to return message
    for(int x = 0; x < ticksCopied; x++){
-      msg = msg + "'" + TimeToString(ticks_array[x].time,TIME_DATE|TIME_SECONDS) + "': [" + DoubleToString(ticks_array[x].bid) + ", " 
+      
+      // Get the additional number of milliseconds
+      ulong millisecondTime = ticks_array[x].time_msc - ((ulong)ticks_array[x].time)*1000; 
+      
+      // Populate return message with the retrieved tick data
+      msg = msg + "'" + TimeToString(ticks_array[x].time,TIME_DATE|TIME_SECONDS) + ":" + (string)millisecondTime + "': [" + DoubleToString(ticks_array[x].bid) + ", " 
       + DoubleToString(ticks_array[x].ask) + ", " + DoubleToString(ticks_array[x].last) + ", " + DoubleToString(ticks_array[x].volume_real) + ", "
       + IntegerToString(ticks_array[x].flags);
       msg = msg + "]";
+      
+      // If not last message then add comma for further data. 
+      if(x != (ticksCopied-1)){
+         msg = msg + ", ";
+      } 
    }
    
    msg = msg + "}";
@@ -183,6 +273,12 @@ void addSymbolTicksToMessage(string &msg, string symbol, int noOfTicks, datetime
    // { ....
    // 'Payload':{'SYMBOL': {'TIME1':[TICKDATA],'TIME2':[TICKDATA]}}
    // 
+   
+   return true;
+   
+   }
+      
+   
    
 }
 

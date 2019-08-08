@@ -99,8 +99,8 @@ class MTConnector():
         # Market Data Dictionary by Symbol (holds tick data)
         self.MARKET_DATA_DB = {}  # dict of Pandas dataframe containing tick data
 
-        # Thread returns the most recently received DATA block here
-        self.POLLER_DATA_OUTPUT = {}
+        # Market Data Request Response
+        self.REQUEST_RESPONSE_DB = {}  # dict of Pandas dataframe containing tick data
 
         # Verbosity
         self.VERBOSE = VERBOSE
@@ -119,16 +119,24 @@ class MTConnector():
 
         return None
 
+    ##################################################
+    # Function to send commands to MetaTrader (PUSH) #
+    ##################################################
+
+    def remoteSend(self, socket, message):
+        try:
+            socket.send_string(message, zmq.DONTWAIT)
+        except zmq.error.Again:
+            print("\nResource timeout during send.. please try again.")
+            sleep(0.000000001)
+
     ################################
     # Check poller for new data    #
     ################################
     def pollData(self):
 
-        print("Thread Begun")
         while self.ACTIVE:
-            print("Inner loop begun")
             sockets = dict(self.POLLER.poll())
-            print("Inner inner loop begun")
 
             # Process response to commands sent to MetaTrader
             # Receive new market data from MetaTrader
@@ -138,11 +146,11 @@ class MTConnector():
                     if msg != "":
                         msgDict = eval(msg)
                         if self.VERBOSE:
-                            print(msgDict)
+                            print(msgDict['Data'])
 
                         try:
                             for incomingSymbol in msgDict['Data'].keys():
-
+                                print(incomingSymbol)
                                 # Update Market Data DB
                                 if incomingSymbol not in self.MARKET_DATA_DB.keys():
                                     self.MARKET_DATA_DB[incomingSymbol] = DataFrame()
@@ -165,7 +173,40 @@ class MTConnector():
                 except UnboundLocalError:
                     pass  # _symbol may sometimes get referenced before being assigned.
 
-    ##########################################################################
+            if self.PULL_SOCKET in sockets and sockets[self.PULL_SOCKET] == zmq.POLLIN:
+                try:
+                    msg = self.PULL_SOCKET.recv_string(zmq.DONTWAIT)
+                    if msg != "":
+                        msgDict = eval(msg)
+                        if self.VERBOSE:
+                            print(msgDict['Data'])
+
+                        try:
+                            for incomingSymbol in msgDict['Data'].keys():
+                                print(incomingSymbol)
+                                # Update Market Data DB
+                                if incomingSymbol not in self.REQUEST_RESPONSE_DB.keys():
+                                    self.REQUEST_RESPONSE_DB[incomingSymbol] = DataFrame()
+
+                                # Append data to DataFrame corresponding to that symbol
+                                self.REQUEST_RESPONSE_DB[incomingSymbol] = self.REQUEST_RESPONSE_DB[incomingSymbol].append(
+                                    DataFrame.from_dict(msgDict['Data'][incomingSymbol], orient='index',
+                                                        columns=msgDict['MsgType'])
+                                )
+
+                        except Exception as ex:
+                            _exstr = "Exception Type {0}. Args:\n{1!r}"
+                            _msg = _exstr.format(type(ex).__name__, ex.args)
+                            print(_msg)
+
+                except zmq.error.Again:
+                    pass  # resource temporarily unavailable, nothing to print
+                except ValueError:
+                    pass  # No data returned, passing iteration.
+                except UnboundLocalError:
+                    pass  # _symbol may sometimes get referenced before being assigned.
+
+
 
     ###################################
     # Subscribe to ticks from symbol  #
@@ -182,16 +223,32 @@ class MTConnector():
 
         print("[KERNEL] Subscribed to {} BID/ASK updates. See self.MARKET_DATA_DB.".format(symbol))
 
-###########################################################################################################
-#                                      CONVENIENCE FUNCTIONS                                              #
-###########################################################################################################
+    #############################################
+    # Function to generate a random message ID  #
+    #############################################
+    def generateMessageID(self):
+        return random.randint(0, 2000000000)
 
+
+    ###########################################################################################################
+    #                                      CONVENIENCE FUNCTIONS                                              #
+    ###########################################################################################################
+
+    ###########################################################################
+    # Function to construct messages for requested rates data from MetaTrader #
+    ###########################################################################
+
+    def getTicksRange(self,symbol,startTime,endTime):
+
+        messageID = self.generateMessageID()
+
+        msg = "{}|{}|{}|{}|{}|{}|{}".format(messageID, self.CLIENT_ID, 'TICKS', 'RANGE', symbol, startTime, endTime)
+        print(msg)
+        # Send via PUSH Socket
+        self.remoteSend(self.PUSH_SOCKET, msg)
+
+        return messageID
 
 ###########################################################################################################
 #                                      Debugging                                                          #
 ###########################################################################################################
-def main():
-    connector = MTConnector(VERBOSE=True)
-
-
-if __name__ == "__main__": main()

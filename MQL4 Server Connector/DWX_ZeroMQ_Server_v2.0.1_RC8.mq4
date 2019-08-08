@@ -206,7 +206,7 @@ ZmqMsg MessageHandler(ZmqMsg &_request) {
    
    if(_request.size() > 0) {
    
-      // Get data from request   
+      // Get the data send to server pull port
       ArrayResize(_data, _request.size());
       _request.getData(_data);
       string dataStr = CharArrayToString(_data);
@@ -214,7 +214,7 @@ ZmqMsg MessageHandler(ZmqMsg &_request) {
       // Process data
       ParseZmqMessage(dataStr, components);
       
-      // Interpret data
+      // Interpret data and send response to pull socket
       InterpretZmqMessage(&pushSocket, components);
       
    }
